@@ -3627,7 +3627,12 @@ local R = {} do
             }
 
             local variant = type(av.Variant) == "string" and string.lower(av.Variant) or nil
-            local accent = typeof(av.Color) == "Color3" and av.Color or (variant and variantColors[variant]) or (s.CurrentTheme and s.CurrentTheme.Colors.Primary) or Color3.fromRGB(255, 105, 180)
+            local hasCustomAccent = typeof(av.Color) == "Color3"
+            local themeLinkedAccent = not hasCustomAccent and (variant == nil or variant == "pink" or variantColors[variant] == nil)
+            local accent = hasCustomAccent and av.Color
+                or (variant and variant ~= "pink" and variantColors[variant])
+                or (s.CurrentTheme and s.CurrentTheme.Colors.Primary)
+                or Color3.fromRGB(255, 105, 180)
             local customTextColor = typeof(av.TextColor) == "Color3"
             local textColor = customTextColor and av.TextColor or (s.CurrentTheme and s.CurrentTheme.Colors.Text.Default) or Color3.fromRGB(255, 245, 250)
             local customBackground = typeof(av.BackgroundColor) == "Color3" and av.BackgroundColor or nil
@@ -3639,6 +3644,14 @@ local R = {} do
                 return customStroke or color:Lerp(textColor, 0.12)
             end
 
+            local badgeThemeTag = themeLinkedAccent and {
+                OBJECTS = themeObjects,
+                BackgroundColor3 = function()
+                    local primary = s.CurrentTheme and s.CurrentTheme.Colors.Primary or accent
+                    return getBackground(primary)
+                end
+            } or nil
+
             local badge = E("Frame", "TitleTag", self.TITLE_ROW, {
                 AutomaticSize = Enum.AutomaticSize.X,
                 Size = UDim2.new(0, 0, 0, 20),
@@ -3648,6 +3661,7 @@ local R = {} do
                 ClipsDescendants = true,
                 LayoutOrder = 10 + self._TITLE_TAG_COUNT,
                 ZIndex = 6,
+                ThemeTag = badgeThemeTag,
                 Elements = {
                     Corner = UDim.new(0, math.max(0, tonumber(av.CornerRadius) or 10)),
                     Stroke = av.Border == true and {Thickness = tonumber(av.BorderThickness) or 1, Color = getStroke(accent)} or nil,
@@ -3744,6 +3758,10 @@ local R = {} do
                 accent = value
                 customBackground = nil
                 customStroke = nil
+                if badgeThemeTag then
+                    themeObjects.Descendants[badgeThemeTag] = nil
+                    badgeThemeTag = nil
+                end
                 local newBackground = getBackground(accent)
                 local newStroke = getStroke(accent)
                 badge.BackgroundColor3 = newBackground
