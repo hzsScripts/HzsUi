@@ -1,7 +1,7 @@
 //- This Ui Made By Redz Remake By Me For Hzs Hub
 //-
-local a = cloneref or (function(...)
-    return ...
+local a = type(cloneref) == "function" and cloneref or (function(value)
+    return value
 end)
 
 local b = delfolder or deletefolder
@@ -29,9 +29,10 @@ local n = l.Heartbeat
 local o = m.LocalPlayer
 local p = o:GetMouse()
 
-local q = (gethui or function()
+local getUiRoot = type(gethui) == "function" and gethui or function()
     return g.CoreGui
-end)()
+end
+local q = getUiRoot()
 
 local r = {
     Darker = {
@@ -257,9 +258,26 @@ local s = {
 s.Info = s.Information
 s.Save = s.Default
 
-local t = workspace.CurrentCamera.ViewportSize
-local u = function(u, v, w)
-    table.insert(s.Connections, u[w or "Connect"](u, v))
+local currentCamera = workspace.CurrentCamera
+local t = currentCamera and currentCamera.ViewportSize or Vector2.new(800, 600)
+
+local u = function(signal, callback, methodName)
+    if signal == nil or type(callback) ~= "function" then
+        return nil
+    end
+
+    local method = signal[methodName or "Connect"]
+    if type(method) ~= "function" then
+        return nil
+    end
+
+    local ok, connection = pcall(method, signal, callback)
+    if ok and connection then
+        table.insert(s.Connections, connection)
+        return connection
+    end
+
+    return nil
 end
 
 local v = {}
@@ -286,19 +304,30 @@ local y = function(y, z, A)
         x(z, B, C, y)
     end
 end
-local z = function(z, A)
-    if d then
-        local B = z:split "/"
-        B[#B] = nil
+local z = function(path, contents)
+    if type(path) ~= "string" or type(contents) ~= "string" then
+        return false
+    end
 
-        local C = table.concat(B, "/")
+    if type(e) ~= "function" then
+        return false
+    end
 
-        if C ~= "" and (isfolder == nil or not isfolder(C)) then
-            d(C)
+    local folder = string.match(path, "^(.*)/[^/]+$")
+    if folder and folder ~= "" and type(d) == "function" then
+        local folderExists = false
+        if type(isfolder) == "function" then
+            local checkOk, exists = pcall(isfolder, folder)
+            folderExists = checkOk and exists == true
+        end
+
+        if not folderExists then
+            pcall(d, folder)
         end
     end
 
-    e(z, A)
+    local writeOk = pcall(e, path, contents)
+    return writeOk
 end
 
 local A = false
@@ -2582,10 +2611,18 @@ local R = {} do
 
             aP = tick() + 5
             local aQ = aO.Text
-            aO.Text = "Copied to Clipboard!"
-            setclipboard(aC)
-            task.wait(4)
-            aO.Text = aQ
+            local copied = false
+
+            if type(setclipboard) == "function" then
+                copied = pcall(setclipboard, aC)
+            end
+
+            aO.Text = copied and "Copied to Clipboard!" or "Clipboard unavailable"
+            task.delay(2, function()
+                if aO and aO.Parent then
+                    aO.Text = aQ
+                end
+            end)
         end)
 
         if type(az) == "string" then
@@ -3889,36 +3926,52 @@ local R = {} do
         return ae[av]
     end
 
-    function ag:ReadFile(av)
-        assert(type(av) == "string",`"Window.ReadFile[param 1]". 'string' expected, got {typeof(av)}`)
-        av =`{self.ScriptFolder}/{av}`
+    function ag:ReadFile(fileName)
+        assert(type(fileName) == "string",`"Window.ReadFile[param 1]". 'string' expected, got {typeof(fileName)}`)
 
-        if f ~= nil and (isfile == nil or not isfile(av)) then
-            return f(av)
+        if type(self.ScriptFolder) ~= "string" or self.ScriptFolder == "" or type(f) ~= "function" then
+            return nil
         end
+
+        local path = `{self.ScriptFolder}/{fileName}`
+        if type(isfile) == "function" then
+            local checkOk, exists = pcall(isfile, path)
+            if not checkOk or not exists then
+                return nil
+            end
+        end
+
+        local readOk, contents = pcall(f, path)
+        if readOk then
+            return contents
+        end
+
+        return nil
     end
 
-    function ag:WriteFile(av, aw)
-        assert(type(av) == "string",`"Window.WriteFile[param 1]". 'string' expected, got {typeof(av)}`)
-        av =`{self.ScriptFolder}/{av}`
+    function ag:WriteFile(fileName, contents)
+        assert(type(fileName) == "string",`"Window.WriteFile[param 1]". 'string' expected, got {typeof(fileName)}`)
 
-        if aw ~= nil and type(aw) ~= "string" then
-            error(`"Window.WriteFile[param 2]". 'string', or 'nil' expected, got {typeof(aw)}`, 2)
+        if contents ~= nil and type(contents) ~= "string" then
+            error(`"Window.WriteFile[param 2]". 'string', or 'nil' expected, got {typeof(contents)}`, 2)
         end
 
-        if aw == nil then
-            if c ~= nil then
-                c(`{self.ScriptFolder}/{av}`)
-                return true
-            end
-        else
-            if e ~= nil then
-                z(`{self.ScriptFolder}/{av}`)
-                return true
-            end
+        if type(self.ScriptFolder) ~= "string" or self.ScriptFolder == "" then
+            return false
         end
 
-        return false
+        local path = `{self.ScriptFolder}/{fileName}`
+
+        if contents == nil then
+            if type(c) ~= "function" then
+                return false
+            end
+
+            local deleteOk = pcall(c, path)
+            return deleteOk
+        end
+
+        return z(path, contents)
     end
 
     function ag:NewMinimizer(av)
