@@ -283,22 +283,42 @@ end
 
 local v = {}
 v.__index = v
-local w = function(w, x)
-    for y in x:gmatch "[^%.]+" do
-        w = w[y]
+local w = function(root, path)
+    if type(path) ~= "string" then
+        return path
     end
 
-    return w
+    local value = root
+    for key in string.gmatch(path, "[^%.]+") do
+        if type(value) ~= "table" then
+            return nil
+        end
+
+        value = value[key]
+        if value == nil then
+            return nil
+        end
+    end
+
+    return value
 end
-local x = function(x, y, z, A)
-    if not A then
-        A = s.CurrentTheme
+
+local x = function(object, property, themeValue, theme)
+    theme = theme or s.CurrentTheme
+
+    local value = themeValue
+    if type(value) == "function" then
+        local ok, result = pcall(value)
+        if not ok then
+            return
+        end
+        value = result
     end
 
-    x[y] = w(A, if type(z) == "function" then
-    z()
-    else
-    z)
+    local resolved = type(value) == "string" and w(theme, value) or value
+    if resolved ~= nil then
+        object[property] = resolved
+    end
 end
 local y = function(y, z, A)
     for B, C in A do
@@ -2384,58 +2404,60 @@ local R = {} do
         local aB = av.Members or av.TotalMembers
         local aC = av.Invite or av.Link
 
-        assert(type(aC) == "string",`"Tab.AddDiscordInvite.Invite". 'string' expected, got {typeof(aC)}`)
+        assert(type(aC) == "string", '"Tab.AddDiscordInvite.Invite". \'string\' expected')
 
         if az ~= nil and typeof(az) ~= "Color3" and type(az) ~= "string" then
-            error(`"Tab.AddDiscordInvite.Banner". 'nil', 'Color3', or 'string' expected, got {typeof(az)}`, 2)
+            error('"Tab.AddDiscordInvite.Banner". Color3, string, or nil expected', 2)
         end
-
         if aA ~= nil and type(aA) ~= "number" then
-            error(`"Tab.AddDiscordInvite.Online". 'number' expected, got {typeof(aA)}`, 2)
+            error('"Tab.AddDiscordInvite.Online". number expected', 2)
         end
-
         if aB ~= nil and type(aB) ~= "number" then
-            error(`"Tab.AddDiscordInvite.Members". 'nil', or 'number' expected, got {typeof(aB)}`, 2)
+            error('"Tab.AddDiscordInvite.Members". number or nil expected', 2)
         end
 
         if I.ZIndexBehavior ~= Enum.ZIndexBehavior.Sibling then
             I.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         end
 
-        local aD = V[self]
-        local aE = T[self].Container
+        local themeObjects = V[self]
+        local container = T[self].Container
+        local inviteCode = aC:match("discord%.gg/([%w_%-]+)")
+            or aC:match("discord%.com/invite/([%w_%-]+)")
+            or aC:match("discordapp%.com/invite/([%w_%-]+)")
+            or aC:match("^%s*([%w_%-]+)%s*$")
+        assert(type(inviteCode) == "string" and #inviteCode > 0, '"Tab.AddDiscordInvite.Invite". invalid Discord invite URL or code')
 
-        local aF = E("Frame", "Option", aE, {
+        local card = E("Frame", "Option", container, {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 148)
         })
 
-        local aG = E("CanvasGroup", aF, {
-            Size = UDim2.new(0, 178, 1, - 15),
+        local cardBody = E("CanvasGroup", card, {
+            Size = UDim2.new(0, 178, 1, -15),
             Position = UDim2.new(0, 5, 1, 0),
             AnchorPoint = Vector2.new(0, 1),
             ClipsDescendants = true,
             Elements = {
                 Corner = UDim.new(0, 18),
-                Stroke = {
-                    ThemeTag = {
-                        Color = "Colors.Border.Default"
-                    }
-                }
+                Stroke = {ThemeTag = {Color = "Colors.Border.Default"}}
             },
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 BackgroundColor3 = "Colors.Buttons.Default"
             }
         })
 
-        local aH = E("ImageLabel", aG, {
+        local banner = E("ImageLabel", cardBody, {
             BackgroundColor3 = Color3.new(1, 1, 1),
-            Size = UDim2.fromScale(1, 0.28),
-            BackgroundTransparency = 1
+            Size = UDim2.new(1, 0, 0, 42),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Image = "",
+            ScaleType = Enum.ScaleType.Crop
         })
 
-        local aI = E("TextLabel", aF, {
+        local inviteLink = E("TextLabel", card, {
             Position = UDim2.fromOffset(5, 0),
             Size = UDim2.new(1, 0, 0, 15),
             TextColor3 = Color3.fromRGB(40, 150, 255),
@@ -2444,19 +2466,21 @@ local R = {} do
             TextSize = 9,
             Text = aC,
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 TextColor3 = "Colors.Link",
                 Font = "Font.Medium"
             }
         })
 
-        local aJ = E("ImageLabel", aG, {
+        local serverIcon = E("ImageLabel", cardBody, {
             Size = UDim2.fromOffset(33, 33),
             Position = UDim2.new(0, 10, 0.28, 0),
             AnchorPoint = Vector2.new(0, 0.5),
-            Image = ay,
+            Image = ay or "",
+            BackgroundTransparency = 1,
+            ScaleType = Enum.ScaleType.Crop,
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 BackgroundColor3 = "Colors.Buttons.Default"
             },
             Elements = {
@@ -2464,33 +2488,32 @@ local R = {} do
                 Stroke = {
                     Thickness = 2.2,
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-                    ThemeTag = {
-                        OBJECTS = aD,
-                        Color = "Colors.Buttons.Default"
-                    }
+                    ThemeTag = {OBJECTS = themeObjects, Color = "Colors.Border.Default"}
                 }
             }
         })
 
-        local aK = E("TextLabel", aG, {
-            Size = UDim2.new(1, - 10, 0, 10),
-            Position = UDim2.new(0, 10, 0.44, 0),
+        local serverTitle = E("TextLabel", cardBody, {
+            Size = UDim2.new(1, -10, 0, 14),
+            Position = UDim2.new(0, 50, 0.31, 0),
             TextXAlignment = Enum.TextXAlignment.Left,
             BackgroundTransparency = 1,
             TextSize = 11,
             Text = aw,
+            TextTruncate = Enum.TextTruncate.AtEnd,
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 TextColor3 = "Colors.Text.Default",
                 Font = "Font.Bold"
             }
         })
 
-        local aL
-
-        if aA or aB then
-            aL = E("Frame", aG, {
-                Size = UDim2.new(1, - 10, 0, 9),
+        local countRow = nil
+        local onlineLabel = nil
+        local membersLabel = nil
+        if aA ~= nil or aB ~= nil or av.FetchAPI ~= false then
+            countRow = E("Frame", cardBody, {
+                Size = UDim2.new(1, -10, 0, 11),
                 Position = UDim2.new(0, 0, 0.52, 0),
                 BackgroundTransparency = 1,
                 Elements = {
@@ -2502,156 +2525,354 @@ local R = {} do
                         HorizontalAlignment = Enum.HorizontalAlignment.Left,
                         VerticalAlignment = Enum.VerticalAlignment.Center,
                         FillDirection = Enum.FillDirection.Horizontal,
-                        Padding = UDim.new(0, 4),
+                        Padding = UDim.new(0, 8)
                     }
                 }
             })
-            local aM = function(aM, aN)
-                return E("Frame", aL, {
+
+            local function makeCount(color, text)
+                local frame = E("Frame", countRow, {
                     Size = UDim2.fromScale(0, 1),
                     AutomaticSize = Enum.AutomaticSize.X,
+                    BackgroundTransparency = 1
+                })
+                E("Frame", frame, {
+                    Size = UDim2.fromOffset(4, 4),
+                    Position = UDim2.new(0, 4, 0.5, 0),
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    BackgroundColor3 = color,
+                    Elements = {Corner = UDim.new(1, 0)}
+                })
+                local label = E("TextLabel", frame, {
+                    Size = UDim2.new(0, 0, 1, 0),
+                    Position = UDim2.new(0, 12, 0.5, 0),
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    AutomaticSize = Enum.AutomaticSize.X,
                     BackgroundTransparency = 1,
-                    Childs = {
-                        E("Frame", {
-                            Size = UDim2.fromOffset(3, 3),
-                            Position = UDim2.new(0, 5, 0.5, 0),
-                            AnchorPoint = Vector2.new(0, 0.5),
-                            BackgroundColor3 = aM,
-                            Elements = {
-                                Corner = UDim.new(1, 0)
-                            }
-                        }),
-                        E("TextLabel", {
-                            Size = UDim2.new(0, 0, 1, 0),
-                            Position = UDim2.new(0, 12, 0.5, 0),
-                            AnchorPoint = Vector2.new(0, 0.5),
-                            AutomaticSize = Enum.AutomaticSize.X,
-                            BackgroundTransparency = 1,
-                            TextSize = 7,
-                            Text = aN,
-                            ThemeTag = {
-                                OBJECTS = aD,
-                                TextColor3 = "Colors.Text.Darker",
-                                Font = "Font.Normal"
-                            }
-                        })
+                    TextSize = 7,
+                    Text = text,
+                    ThemeTag = {
+                        OBJECTS = themeObjects,
+                        TextColor3 = "Colors.Text.Darker",
+                        Font = "Font.Normal"
                     }
                 })
+                return label
             end
 
-            if aA ~= nil then
-                aM(Color3.fromRGB(67, 181, 129), N(aA) .. " Online")
-            end
-            if aB ~= nil then
-                aM(Color3.fromRGB(86, 101, 105), N(aB) .. " Members")
+            if av.FetchAPI ~= false then
+                onlineLabel = makeCount(Color3.fromRGB(67, 181, 129), "Loading...")
+                membersLabel = makeCount(Color3.fromRGB(86, 101, 105), "Loading...")
+            else
+                if aA ~= nil then onlineLabel = makeCount(Color3.fromRGB(67, 181, 129), N(aA) .. " Online") end
+                if aB ~= nil then membersLabel = makeCount(Color3.fromRGB(86, 101, 105), N(aB) .. " Members") end
             end
         end
 
-        local aM = E("TextLabel", aG, {
-            Size = UDim2.new(1, - 50, 0, 8),
-            Position = UDim2.new(0, 10, aL and 0.6 or 0.56, 0),
+        local description = E("TextLabel", cardBody, {
+            Size = UDim2.new(1, -20, 0, 22),
+            Position = UDim2.new(0, 10, countRow and 0.62 or 0.56, 0),
             TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
             AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundTransparency = 1,
             TextSize = 8,
             Text = ax or "",
             TextWrapped = true,
+            TextTruncate = Enum.TextTruncate.AtEnd,
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 TextColor3 = "Colors.Text.Darker",
                 Font = "Font.Medium"
             }
         })
 
-        local aN = E("Frame", aG, {
-            Size = UDim2.new(1, 0, 0.28, 0),
-            Position = UDim2.fromScale(0, 1),
+        local footer = E("Frame", cardBody, {
+            Size = UDim2.new(1, 0, 0, 42),
+            Position = UDim2.new(0, 0, 1, 0),
             AnchorPoint = Vector2.new(0, 1),
             BorderSizePixel = 0,
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 BackgroundColor3 = "Colors.Buttons.Default"
             }
         })
 
-        if #aM.Text > 0 then
-            aN.Size = UDim2.new(1, 0, 0.42, 0)
-
-            E("UIGradient", aN, {
-                Rotation = - 90,
+        if #description.Text > 0 then
+            E("UIGradient", footer, {
+                Rotation = -90,
                 Transparency = NumberSequence.new{
-                    NumberSequenceKeypoint.new(0.00, 0.00),
-                    NumberSequenceKeypoint.new(0.60, 0.00),
-                    NumberSequenceKeypoint.new(1.00, 1.00)
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(0.6, 0),
+                    NumberSequenceKeypoint.new(1, 1)
                 }
             })
         end
 
-        local aO = E("TextButton", aN, {
-            Position = UDim2.new(0.5, 0, 1, - 9),
-            Size = UDim2.new(1, - 18, 0, 18),
+        local joinButton = E("TextButton", footer, {
+            Position = UDim2.new(0.5, 0, 1, -9),
+            Size = UDim2.new(1, -18, 0, 18),
             AnchorPoint = Vector2.new(0.5, 1),
-            Text = "Go to Server",
-            Elements = {
-                Corner = UDim.new(0.5, 0)
-            },
+            Text = "Copy Invite",
+            AutoButtonColor = false,
+            Elements = {Corner = UDim.new(0.5, 0)},
             ThemeTag = {
-                OBJECTS = aD,
+                OBJECTS = themeObjects,
                 BackgroundColor3 = "Colors.JoinButton",
                 TextColor3 = "Colors.Text.Default",
                 Font = "Font.Bold"
             }
         })
 
-        local aP = 0
-
-        u(aO.Activated, function()
-            if (tick() - aP) < 0 then
-                return
-            end
-
-            aP = tick() + 5
-            local aQ = aO.Text
-            local copied = false
-
-            if type(setclipboard) == "function" then
-                copied = pcall(setclipboard, aC)
-            end
-
-            aO.Text = copied and "Copied to Clipboard!" or "Clipboard unavailable"
-            task.delay(2, function()
-                if aO and aO.Parent then
-                    aO.Text = aQ
-                end
-            end)
-        end)
-
-        if type(az) == "string" then
-            aH.ScaleType = Enum.ScaleType.Crop
-            aH.Image = az
-        elseif typeof(az) == "Color3" then
-            aH.BackgroundTransparency = 0
-            E("UIGradient", aH, {
-                Rotation = - 15,
+        if typeof(az) == "Color3" then
+            banner.BackgroundTransparency = 0
+            banner.BackgroundColor3 = az
+            E("UIGradient", banner, {
+                Rotation = -15,
                 Color = ColorSequence.new{
                     ColorSequenceKeypoint.new(0, az),
                     ColorSequenceKeypoint.new(1, az:Lerp(Color3.new(1, 1, 1), 0.2))
                 }
             })
+        elseif type(az) == "string" then
+            banner.BackgroundTransparency = 1
+            banner.Image = az
         end
 
-        return setmetatable({
-            DESTROY_ELEMENT = aF,
-            VISIBLE_ELEMENT = aF,
+        local copiedAt = 0
+        u(joinButton.Activated, function()
+            if tick() - copiedAt < 0 then return end
+            copiedAt = tick() + 5
+            local previousText = joinButton.Text
+            local copied = false
+            if type(setclipboard) == "function" then
+                copied = pcall(setclipboard, aC)
+            end
+            joinButton.Text = copied and "Copied to Clipboard!" or "Clipboard unavailable"
+            task.delay(2, function()
+                if joinButton and joinButton.Parent then
+                    joinButton.Text = previousText
+                end
+            end)
+        end)
 
+        local component = setmetatable({
+            DESTROY_ELEMENT = card,
+            VISIBLE_ELEMENT = card,
             Title = aw,
             Description = ax,
-            DESCRIPTION_LABEL = aM,
-            TITLE_LABEL = aK,
-
+            DESCRIPTION_LABEL = description,
+            TITLE_LABEL = serverTitle,
             Kind = "DiscordInvite",
-            Parent = self
+            Parent = self,
+            Invite = aC,
+            InviteCode = inviteCode,
+            Loading = false,
+            ApiData = nil,
+            ApiError = nil
         }, ai)
+
+        local function setCount(label, value, suffix)
+            if label and label.Parent and type(value) == "number" then
+                label.Text = N(value) .. suffix
+            end
+        end
+
+        local function setDiscordImage(imageObject, imageUrl, cacheName)
+            if not imageObject or not imageObject.Parent then return end
+
+            local assetLoader = getcustomasset or getsynasset
+            local requestFunction = nil
+            if type(syn) == "table" and type(syn.request) == "function" then
+                requestFunction = syn.request
+            elseif type(http_request) == "function" then
+                requestFunction = http_request
+            elseif type(request) == "function" then
+                requestFunction = request
+            end
+
+            if type(assetLoader) == "function" and type(e) == "function" and requestFunction then
+                local ok, response = pcall(requestFunction, {
+                    Url = imageUrl,
+                    Method = "GET"
+                })
+                local bytes = ok and type(response) == "table" and (response.Body or response.body) or nil
+                if type(bytes) == "string" and #bytes > 0 then
+                    local folder = "HzsAssets"
+                    if type(d) == "function" then
+                        pcall(d, folder)
+                    end
+                    local path = folder .. "/" .. cacheName
+                    local writeOk = pcall(e, path, bytes)
+                    if writeOk then
+                        local assetOk, assetUri = pcall(assetLoader, path)
+                        if assetOk and type(assetUri) == "string" then
+                            imageObject.Image = assetUri
+                            return
+                        end
+                    end
+                end
+            end
+
+            pcall(function()
+                imageObject.Image = imageUrl
+            end)
+        end
+
+        local function loadInviteData()
+            local url = "https://discord.com/api/v10/invites/" .. inviteCode .. "?with_counts=true"
+            local body = nil
+            local lastError = nil
+
+            local requestFunction = nil
+            if type(syn) == "table" and type(syn.request) == "function" then
+                requestFunction = syn.request
+            elseif type(http_request) == "function" then
+                requestFunction = http_request
+            elseif type(request) == "function" then
+                requestFunction = request
+            end
+
+            if requestFunction then
+                local ok, response = pcall(requestFunction, {
+                    Url = url,
+                    Method = "GET",
+                    Headers = {Accept = "application/json"}
+                })
+                if ok and type(response) == "table" then
+                    local status = response.StatusCode or response.Status or 200
+                    if tonumber(status) and tonumber(status) >= 200 and tonumber(status) < 300 then
+                        body = response.Body or response.body
+                    else
+                        lastError = "Discord API HTTP " .. tostring(status)
+                    end
+                elseif not ok then
+                    lastError = tostring(response)
+                end
+            end
+
+            if type(body) ~= "string" or body == "" then
+                local ok, result = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                if ok and type(result) == "string" and result ~= "" then
+                    body = result
+                else
+                    lastError = tostring(result)
+                end
+            end
+
+            if type(body) ~= "string" or body == "" then
+                local ok, result = pcall(function()
+                    return k:GetAsync(url)
+                end)
+                if ok and type(result) == "string" and result ~= "" then
+                    body = result
+                else
+                    lastError = tostring(result)
+                end
+            end
+
+            if type(body) ~= "string" or body == "" then
+                return nil, lastError or "Discord API request unavailable"
+            end
+
+            local decodeOk, data = pcall(function()
+                return k:JSONDecode(body)
+            end)
+            if not decodeOk or type(data) ~= "table" then
+                return nil, "Invalid JSON response from Discord API"
+            end
+            if type(data.message) == "string" and data.code then
+                return nil, data.message
+            end
+            return data
+        end
+
+        function component:Refresh()
+            if self.Loading or self.Destroyed then return self end
+            self.Loading = true
+            self.ApiError = nil
+            task.spawn(function()
+                local data, err = loadInviteData()
+                if self.Destroyed or not card.Parent then return end
+                self.Loading = false
+
+                if not data then
+                    self.ApiError = err or "Unable to load invite"
+                    if onlineLabel and onlineLabel.Parent then
+                        onlineLabel.Text = type(aA) == "number" and (N(aA) .. " Online") or "Online unavailable"
+                    end
+                    if membersLabel and membersLabel.Parent then
+                        membersLabel.Text = type(aB) == "number" and (N(aB) .. " Members") or "Members unavailable"
+                    end
+                    warn("[HzsLib] Discord invite API: " .. tostring(self.ApiError))
+                    return
+                end
+
+                self.ApiData = data
+                local guild = type(data.guild) == "table" and data.guild or nil
+                if not guild then
+                    self.ApiError = "Invite does not contain guild information"
+                    if onlineLabel and onlineLabel.Parent then onlineLabel.Text = "Online unavailable" end
+                    if membersLabel and membersLabel.Parent then membersLabel.Text = "Members unavailable" end
+                    return
+                end
+
+                self.Guild = guild
+                self.GuildId = guild.id
+                self.OnlineCount = data.approximate_presence_count
+                self.MemberCount = data.approximate_member_count
+
+                if av.UseGuildName ~= false and type(guild.name) == "string" and guild.name ~= "" then
+                    serverTitle.Text = guild.name
+                    self.Title = guild.name
+                end
+                if av.UseGuildDescription ~= false and type(guild.description) == "string" and guild.description ~= "" then
+                    description.Text = guild.description
+                    self.Description = guild.description
+                end
+
+                if type(data.approximate_presence_count) == "number" then
+                    setCount(onlineLabel, data.approximate_presence_count, " Online")
+                elseif onlineLabel and onlineLabel.Parent then
+                    onlineLabel.Text = "Online unavailable"
+                end
+                if type(data.approximate_member_count) == "number" then
+                    setCount(membersLabel, data.approximate_member_count, " Members")
+                elseif membersLabel and membersLabel.Parent then
+                    membersLabel.Text = "Members unavailable"
+                end
+
+                if av.UseGuildIcon ~= false and type(guild.icon) == "string" and type(guild.id) == "string" then
+                    local extension = guild.icon:sub(1, 2) == "a_" and "gif" or "png"
+                    local imageUrl = "https://cdn.discordapp.com/icons/" .. guild.id .. "/" .. guild.icon .. "." .. extension .. "?size=128"
+                    setDiscordImage(serverIcon, imageUrl, "discord_guild_" .. guild.id .. "_icon." .. extension)
+                end
+
+                if av.UseGuildBanner ~= false and type(guild.banner) == "string" and type(guild.id) == "string" then
+                    local extension = guild.banner:sub(1, 2) == "a_" and "gif" or "png"
+                    banner.BackgroundTransparency = 1
+                    local imageUrl = "https://cdn.discordapp.com/banners/" .. guild.id .. "/" .. guild.banner .. "." .. extension .. "?size=512"
+                    setDiscordImage(banner, imageUrl, "discord_guild_" .. guild.id .. "_banner." .. extension)
+                end
+            end)
+            return self
+        end
+
+        function component:GetData()
+            return self.ApiData
+        end
+
+        function component:GetCounts()
+            return self.OnlineCount, self.MemberCount
+        end
+
+        if av.FetchAPI ~= false then
+            component:Refresh()
+        end
+
+        return component
     end
 
     function ah:AddParagraph(av, aw)
@@ -3628,15 +3849,17 @@ local R = {} do
 
             local variant = type(av.Variant) == "string" and string.lower(av.Variant) or nil
             local hasCustomAccent = typeof(av.Color) == "Color3"
-            local themeLinkedAccent = not hasCustomAccent and (variant == nil or variant == "pink" or variantColors[variant] == nil)
+            local customBackground = typeof(av.BackgroundColor) == "Color3" and av.BackgroundColor or nil
+            local customStroke = typeof(av.StrokeColor) == "Color3" and av.StrokeColor or nil
+            local themeLinkedAccent = not hasCustomAccent
+                and customBackground == nil
+                and (variant == nil or variant == "pink" or variantColors[variant] == nil)
             local accent = hasCustomAccent and av.Color
                 or (variant and variant ~= "pink" and variantColors[variant])
                 or (s.CurrentTheme and s.CurrentTheme.Colors.Primary)
                 or Color3.fromRGB(255, 105, 180)
             local customTextColor = typeof(av.TextColor) == "Color3"
             local textColor = customTextColor and av.TextColor or (s.CurrentTheme and s.CurrentTheme.Colors.Text.Default) or Color3.fromRGB(255, 245, 250)
-            local customBackground = typeof(av.BackgroundColor) == "Color3" and av.BackgroundColor or nil
-            local customStroke = typeof(av.StrokeColor) == "Color3" and av.StrokeColor or nil
             local function getBackground(color)
                 return customBackground or color:Lerp((s.CurrentTheme and s.CurrentTheme.Colors.Dialog.Background) or Color3.fromRGB(18, 12, 18), 0.72)
             end
@@ -3646,10 +3869,7 @@ local R = {} do
 
             local badgeThemeTag = themeLinkedAccent and {
                 OBJECTS = themeObjects,
-                BackgroundColor3 = function()
-                    local primary = s.CurrentTheme and s.CurrentTheme.Colors.Primary or accent
-                    return getBackground(primary)
-                end
+                BackgroundColor3 = "Colors.Primary"
             } or nil
 
             local badge = E("Frame", "TitleTag", self.TITLE_ROW, {
@@ -3759,7 +3979,7 @@ local R = {} do
                 customBackground = nil
                 customStroke = nil
                 if badgeThemeTag then
-                    themeObjects.Descendants[badgeThemeTag] = nil
+                    themeObjects.Descendants.BackgroundColor3 = nil
                     badgeThemeTag = nil
                 end
                 local newBackground = getBackground(accent)
