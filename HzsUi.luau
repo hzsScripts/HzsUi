@@ -3040,7 +3040,7 @@ local R = {} do
             Flag = config.Flag,
             Callback = function(name)
                 if type(name) == "string" and s:IsValidTheme(name) then
-                    s:SetTheme(name)
+                    s:SelectTheme(name)
                     G(callbacks, name)
                 end
             end
@@ -3048,6 +3048,7 @@ local R = {} do
     end
 
     ah.AddThemeDropdown = ah.AddThemeSelector
+    ah.AddThemePicker = ah.AddThemeSelector
 
     function ah:AddColorPicker(av)
         assert(type(av) == "table", '"Tab.AddColorPicker". configuration table expected')
@@ -4473,12 +4474,38 @@ local function ApplyAccent(theme, color)
     if type(colors) ~= "table" or typeof(color) ~= "Color3" then
         return
     end
+
     colors.Primary = color
     colors.OnPrimary = color:Lerp(Color3.new(0, 0, 0), 0.28)
     colors.ScrollBar = color
     colors.Link = color
+    colors.Stroke = colors.Stroke and colors.Stroke:Lerp(color, 0.18) or color
+
     if colors.Slider then
         colors.Slider.SliderBar = color
+        colors.Slider.SliderNumber = colors.Text and colors.Text.Default or color
+    end
+end
+
+-- Rebuild the theme bindings for the root and every tab. The original update
+-- method intentionally skips managers already marked as updated, which meant
+-- that changing the palette after the first render could leave old colors on
+-- screen. Reset the whole manager tree before applying the new theme.
+local function RefreshThemeObjects(manager)
+    if type(manager) ~= "table" then
+        return
+    end
+
+    manager.UPDATED_OBJECTS = false
+
+    for _, child in pairs(manager.Descendants or {}) do
+        if type(child) == "table" and type(child.update) == "function" then
+            RefreshThemeObjects(child)
+        end
+    end
+
+    if type(manager.update) == "function" then
+        manager:update()
     end
 end
 
@@ -4508,7 +4535,7 @@ function s:SetAccentColor(ab, ac)
     if ac ~= false and self.WindowSettings then
         self.WindowSettings.CustomAccent = {ab.R, ab.G, ab.B}
     end
-    C:update()
+    RefreshThemeObjects(C)
     return self
 end
 
@@ -4527,7 +4554,17 @@ function s:SetTheme(ab)
     if type(savedAccent) == "table" and type(savedAccent[1]) == "number" and type(savedAccent[2]) == "number" and type(savedAccent[3]) == "number" then
         ApplyAccent(ac, Color3.new(math.clamp(savedAccent[1], 0, 1), math.clamp(savedAccent[2], 0, 1), math.clamp(savedAccent[3], 0, 1)))
     end
-    C:update()
+    RefreshThemeObjects(C)
+    return self
+end
+
+-- Public alias for callers that prefer an action-style name.
+function s:SelectTheme(ab)
+    return self:SetTheme(ab)
+end
+
+function s:GetThemeOptions()
+    return self:GetThemes()
 end
 
 function s:SetUIScale(ab)
