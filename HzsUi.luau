@@ -44,6 +44,7 @@ local r = {
             },
             Primary = Color3.fromRGB(255, 105, 180),
             OnPrimary = Color3.fromRGB(190, 65, 125),
+            Toggle = {Thumb = Color3.fromRGB(190, 65, 125)},
             ScrollBar = Color3.fromRGB(235, 85, 155),
             Stroke = Color3.fromRGB(62, 36, 52),
 
@@ -1919,7 +1920,7 @@ local R = {} do
 
         local aH = {
             OBJECTS = aB,
-            BackgroundColor3 = "Colors.OnPrimary"
+            BackgroundColor3 = "Colors.Toggle.Thumb"
         }
 
         local aI = E("Frame", aG, {
@@ -3176,7 +3177,12 @@ local R = {} do
             hueMarker.Position = UDim2.new(h, 0, 0.5, 0)
             hexLabel.Text = string.format("#%02X%02X%02X", math.floor(newColor.R * 255 + 0.5), math.floor(newColor.G * 255 + 0.5), math.floor(newColor.B * 255 + 0.5))
             if av.ApplyToTheme ~= false then
-                s:SetAccentColor(newColor, save == true)
+                local target = string.lower(tostring(av.Target or av.ApplyTo or "accent"))
+                if target == "border" or target == "borders" or target == "stroke" then
+                    s:SetBorderColor(newColor, save == true)
+                else
+                    s:SetAccentColor(newColor, save == true)
+                end
             end
             if save and flag then
                 ae[flag] = {newColor.R, newColor.G, newColor.B}
@@ -3642,16 +3648,14 @@ local R = {} do
                 ClipsDescendants = true,
                 LayoutOrder = 10 + self._TITLE_TAG_COUNT,
                 ZIndex = 6,
-                -- BackgroundColor3 is computed as a Color3 above. ThemeTag only
-                -- accepts theme paths (strings), not functions returning Color3.
                 Elements = {
-                    Corner = UDim.new(1, 0),
-                    Stroke = {Thickness = 1, Color = getStroke(accent)},
+                    Corner = UDim.new(0, math.max(0, tonumber(av.CornerRadius) or 10)),
+                    Stroke = av.Border == true and {Thickness = tonumber(av.BorderThickness) or 1, Color = getStroke(accent)} or nil,
                     Padding = {
-                        PaddingLeft = UDim.new(0, 8),
-                        PaddingRight = UDim.new(0, 8),
-                        PaddingTop = UDim.new(0, 2),
-                        PaddingBottom = UDim.new(0, 2)
+                        PaddingLeft = UDim.new(0, math.max(0, tonumber(av.PaddingX) or 8)),
+                        PaddingRight = UDim.new(0, math.max(0, tonumber(av.PaddingX) or 8)),
+                        PaddingTop = UDim.new(0, math.max(0, tonumber(av.PaddingY) or 2)),
+                        PaddingBottom = UDim.new(0, math.max(0, tonumber(av.PaddingY) or 2))
                     },
                     ListLayout = {
                         FillDirection = Enum.FillDirection.Horizontal,
@@ -3704,8 +3708,8 @@ local R = {} do
                 Size = UDim2.new(0, 0, 1, 0),
                 BackgroundTransparency = 1,
                 Text = title,
-                TextSize = 10,
-                Font = Enum.Font.BuilderSansBold,
+                TextSize = math.clamp(tonumber(av.TextSize) or 10, 8, 24),
+                Font = typeof(av.Font) == "EnumItem" and av.Font or Enum.Font.BuilderSansBold,
                 TextColor3 = textColor,
                 TextXAlignment = Enum.TextXAlignment.Center,
                 TextYAlignment = Enum.TextYAlignment.Center,
@@ -3742,9 +3746,6 @@ local R = {} do
                 customStroke = nil
                 local newBackground = getBackground(accent)
                 local newStroke = getStroke(accent)
-                -- Keep explicitly selected colors as direct instance values.
-                -- The theme resolver expects dotted theme-path strings, not
-                -- callbacks that return Color3 values.
                 badge.BackgroundColor3 = newBackground
                 local outline = badge:FindFirstChildOfClass("UIStroke")
                 if outline then
@@ -3759,11 +3760,39 @@ local R = {} do
                 return self
             end
 
+            function component:SetBackgroundColor(value)
+                assert(typeof(value) == "Color3", '"TitleTag.SetBackgroundColor" Color3 expected')
+                customBackground = value
+                badge.BackgroundColor3 = value
+                return self
+            end
+
+            function component:SetBorder(value, enabled)
+                if type(value) == "boolean" then enabled = value end
+                local outline = badge:FindFirstChildOfClass("UIStroke")
+                if enabled then
+                    if not outline then
+                        outline = Instance.new("UIStroke")
+                        outline.Thickness = 1
+                        outline.Parent = badge
+                    end
+                    outline.Color = typeof(value) == "Color3" and value or getStroke(accent)
+                elseif outline then
+                    outline:Destroy()
+                end
+                return self
+            end
+
+            function component:SetCornerRadius(value)
+                assert(type(value) == "number", '"TitleTag.SetCornerRadius" number expected')
+                local corner = badge:FindFirstChildOfClass("UICorner")
+                if corner then corner.CornerRadius = UDim.new(0, math.max(0, value)) end
+                return self
+            end
+
             function component:SetTextColor(value)
                 assert(typeof(value) == "Color3", '"TitleTag.SetTextColor". Color3 expected')
                 textColor = value
-                -- Stop the default theme paths from overwriting the custom
-                -- text/icon color when the user explicitly sets one.
                 themeObjects.Descendants.TextColor3 = nil
                 themeObjects.Descendants.ImageColor3 = nil
                 label.TextColor3 = value
@@ -4433,7 +4462,6 @@ function s:GetIconByName(ab)
         return ao
     end
 
-    -- Built-in theme icons remain available even when the remote catalog is unavailable.
     local ap = self.CurrentTheme and self.CurrentTheme.Icons
     if type(ap) == "table" then
         local aq = ResolveIcon(ap, "", true, ac) or ResolveIcon(ap, "", false, ac)
@@ -4476,7 +4504,6 @@ local function ApplyAccent(theme, color)
     end
 
     colors.Primary = color
-    colors.OnPrimary = color:Lerp(Color3.new(0, 0, 0), 0.28)
     colors.ScrollBar = color
     colors.Link = color
     colors.Stroke = colors.Stroke and colors.Stroke:Lerp(color, 0.18) or color
@@ -4487,10 +4514,6 @@ local function ApplyAccent(theme, color)
     end
 end
 
--- Rebuild the theme bindings for the root and every tab. The original update
--- method intentionally skips managers already marked as updated, which meant
--- that changing the palette after the first render could leave old colors on
--- screen. Reset the whole manager tree before applying the new theme.
 local function RefreshThemeObjects(manager)
     if type(manager) ~= "table" then
         return
@@ -4543,6 +4566,21 @@ function s:GetAccentColor()
     return self.CurrentTheme and self.CurrentTheme.Colors.Primary
 end
 
+function s:SetBorderColor(color, save)
+    assert(typeof(color) == "Color3", '"Library.SetBorderColor" Color3 expected')
+    local colors = self.CurrentTheme and self.CurrentTheme.Colors
+    if not colors then return self end
+    colors.Border = colors.Border or {}
+    colors.Border.Default = color
+    colors.Border.Holding = color:Lerp(colors.Primary or color, 0.35)
+    colors.Stroke = color
+    if save ~= false and self.WindowSettings then
+        self.WindowSettings.CustomBorder = {color.R, color.G, color.B}
+    end
+    RefreshThemeObjects(C)
+    return self
+end
+
 function s:SetTheme(ab)
     assert(type(ab) == "string",`"Library.SetTheme". string expected, got {typeof(ab)}`)
     local ac = self.Themes[ab]
@@ -4558,7 +4596,6 @@ function s:SetTheme(ab)
     return self
 end
 
--- Public alias for callers that prefer an action-style name.
 function s:SelectTheme(ab)
     return self:SetTheme(ab)
 end
@@ -4615,6 +4652,17 @@ function s:MakeWindow(ab)
     local ad = E("UIScale", "Scale", I, {
         Scale = P(1)
     })
+
+    local windowSize = ab.Size or ab.UISize
+    if typeof(windowSize) == "UDim2" then
+        s.Default.UISize = windowSize
+    end
+    if type(ab.UIScale) == "number" then
+        ad.Scale = math.clamp(ab.UIScale, B.MIN_SCALE, B.MAX_SCALE)
+    end
+    if type(ab.BackgroundTransparency) == "number" then
+        s.CurrentTheme.BackgroundTransparency = math.clamp(ab.BackgroundTransparency, 0, 1)
+    end
 
     local ae = {
         Title = ab[1] or ab.Name or ab.Title,
@@ -4714,7 +4762,6 @@ function s:MakeWindow(ab)
     self.Flags = ag
 
     self.Icons = (function()
-        -- This file is automatically @generated by Tree Hub CLI.
 
         return {
             ["a-arrow-down"] = "rbxassetid://92867583610071",
